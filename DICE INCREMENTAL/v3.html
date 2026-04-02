@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dice Incremental v3.0.2</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --panel-bg: #1f2833;
+            --text-main: #66fcf1;
+            --text-alt: #45a29e;
+            --accent-pink: #ff007f;
+            --accent-purple: #7a04eb;
+            --accent-yellow: #ffff00;
+            --accent-red: #ff0000;
+            --border-glow: 0 0 10px var(--text-main);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Press Start 2P', monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            position: relative;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        /* CRT Scanlines */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg, transparent, transparent 2px,
+                rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* Vignette */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* CRT Flicker */
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.98; }
+        }
+        body { animation: flicker 0.15s infinite; }
+
+        h1, h2, h3 {
+            text-transform: uppercase;
+            text-shadow: 0 0 10px var(--text-main), 0 0 20px var(--text-main);
+            margin-top: 0;
+            letter-spacing: 2px;
+        }
+
+        /* Layout */
+        #header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: var(--panel-bg);
+            border: 3px solid var(--text-main);
+            box-shadow: var(--border-glow), inset 0 0 20px rgba(102,252,241,0.1);
+            border-radius: 0;
+            position: relative;
+        }
+
+        #header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(102,252,241,0.05) 50%, transparent 70%);
+            pointer-events: none;
+        }
+
+        #main-container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+            flex-wrap: wrap;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 2px solid var(--text-alt);
+            border-radius: 0;
+            padding: 20px;
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8), inset 0 0 10px rgba(102,252,241,0.05);
+            position: relative;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, rgba(102,252,241,0.02) 0%, transparent 50%, rgba(255,0,127,0.02) 100%);
+            pointer-events: none;
+        }
+
+        /* Dice Area */
+        #dice-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin: 20px 0;
+            min-height: 100px;
+        }
+
+        .die {
+            width: 64px;
+            height: 64px;
+            background: var(--bg-color);
+            border: 3px solid var(--accent-pink);
+            box-shadow: 0 0 15px var(--accent-pink), inset 0 0 10px rgba(255,0,127,0.2);
+            color: var(--accent-pink);
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 0;
+            transition: all 0.1s;
+            position: relative;
+        }
+
+        .die::before {
+            content: '';
+            position: absolute;
+            top: 2px; left: 2px; right: 2px; bottom: 2px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .roll-anim {
+            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both, glow 0.3s ease-out;
+        }
+
+        @keyframes glow {
+            0% { box-shadow: 0 0 15px var(--accent-pink); }
+            50% { box-shadow: 0 0 30px var(--accent-pink); }
+            100% { box-shadow: 0 0 15px var(--accent-pink); }
+        }
+
+        /* Buttons & Upgrades */
+        button {
+            background: transparent;
+            color: var(--text-main);
+            border: 2px solid var(--text-main);
+            padding: 12px 16px;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            border-radius: 0;
+            margin-bottom: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(102,252,241,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--text-main);
+            color: var(--bg-color);
+            box-shadow: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        button:hover:not(:disabled)::before {
+            left: 100%;
+        }
+
+        button:disabled {
+            border-color: #555;
+            color: #555;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .btn-large {
+            font-size: 12px;
+            padding: 16px 20px;
+            border-color: var(--accent-pink);
+            color: var(--accent-pink);
+            box-shadow: 0 0 15px var(--accent-pink);
+        }
+        
+        .btn-large:hover:not(:disabled) {
+            background: var(--accent-pink);
+            color: var(--bg-color);
+        }
+
+        .upgrade-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px dashed var(--text-alt);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .upgrade-item::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--text-main), transparent);
+        }
+
+        /* Glitch Effect */
+        #glitch-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: var(--accent-purple);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            mix-blend-mode: exclusion;
+            animation: glitch-anim 0.2s infinite, shake 0.5s infinite;
+        }
+
+        /* Utilities */
+        .highlight { color: var(--accent-pink); text-shadow: 0 0 10px var(--accent-pink); }
+        .shard-text { color: var(--accent-purple); text-shadow: 0 0 10px var(--accent-purple); font-weight: bold;}
+        .crit-text { animation: pulse-crit 0.5s ease-out; color: var(--accent-yellow); }
+
+        /* Animations */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(5deg); }
+            40% { transform: translate(1px, -2px) rotate(-5deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            80% { transform: translate(-1px, -1px) rotate(5deg); }
+            100% { transform: translate(1px, -2px) rotate(-5deg); }
+        }
+        @keyframes pulse-crit {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); text-shadow: 0 0 20px var(--accent-yellow); }
+            100% { transform: scale(1); }
+        }
+        @keyframes glitch-anim {
+            0% { transform: translate(0) }
+            20% { transform: translate(-5px, 5px) }
+            40% { transform: translate(-5px, -5px) }
+            60% { transform: translate(5px, 5px) }
+            80% { transform: translate(5px, -5px) }
+            100% { transform: translate(0) }
+        }
+
+        /* Particle Effects */
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--accent-pink);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: particle-float 1s ease-out forwards;
+        }
+
+        @keyframes particle-float {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(0); }
+        }
+
+        .upgrade-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px dashed var(--text-alt);
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* Glitch Effect */
+        #glitch-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: var(--accent-purple);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 48px;
+            mix-blend-mode: exclusion;
+            animation: glitch-anim 0.2s infinite;
+        }
+
+        /* Utilities */
+        .highlight { color: var(--accent-pink); text-shadow: 0 0 5px var(--accent-pink); }
+        .shard-text { color: var(--accent-purple); text-shadow: 0 0 5px var(--accent-purple); font-weight: bold;}
+        .crit-text { animation: pulse-crit 0.5s ease-out; color: yellow; }
+
+        /* Animations */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(5deg); }
+            40% { transform: translate(1px, -2px) rotate(-5deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            80% { transform: translate(-1px, -1px) rotate(5deg); }
+            100% { transform: translate(1px, -2px) rotate(-5deg); }
+        }
+        @keyframes pulse-crit {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.5); text-shadow: 0 0 20px yellow; }
+            100% { transform: scale(1); }
+        }
+        @keyframes glitch-anim {
+            0% { transform: translate(0) }
+            20% { transform: translate(-5px, 5px) }
+            40% { transform: translate(-5px, -5px) }
+            60% { transform: translate(5px, 5px) }
+            80% { transform: translate(5px, -5px) }
+            100% { transform: translate(0) }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="glitch-overlay">
+        <div>CAP REACHED</div>
+        <div style="font-size: 24px; margin-top: 20px;">SYSTEM REBOOTING...</div>
+    </div>
+
+    <div id="header">
+        <div>
+            <h2>Credits: <span id="ui-credits" class="highlight">0</span> / <span id="ui-cap">1000</span></h2>
+        </div>
+        <div style="text-align: right;">
+            <h2>Dice Shards: <span id="ui-shards" class="shard-text">0</span></h2>
+            <small>Prestiges: <span id="ui-prestiges">0</span></small>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div class="panel">
+            <h3>Terminal</h3>
+            <button id="btn-roll" class="btn-large">ROLL DICE</button>
+            <div style="text-align: center; min-height: 20px;">
+                <span id="roll-feedback"></span>
+            </div>
+            <div id="dice-area"></div>
+            
+            <div style="margin-top: auto; padding-top: 20px;">
+                <p>Auto-Roll: <span id="ui-autoroll-status">Locked</span></p>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Run Upgrades</h3>
+            <p style="font-size: 0.8em; color: var(--text-alt);">Resets on Prestige</p>
+            <div id="run-upgrades-container"></div>
+        </div>
+
+        <div class="panel">
+            <h3 class="shard-text">System Core</h3>
+            <p style="font-size: 0.8em; color: var(--text-alt);">Requires Dice Shards. Permanent.</p>
+            <div id="perm-upgrades-container"></div>
+        </div>
+    </div>
+
+<script>
+/**
+ * DICE INCREMENTAL - CORE LOGIC
+ */
+
+// --- AUDIO SYSTEM (Web Audio API Juice) ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+
+function playSound(type) {
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    if (type === 'roll') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400 + Math.random() * 200, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } else if (type === 'buy') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime + 0.05);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+    } else if (type === 'prestige') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 1);
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1);
+    }
+}
+
+// --- GAME STATE & CONFIG ---
+const SAVE_KEY = "diceIncrementalSave_v1";
+
+const baseState = {
+    credits: 0,
+    shards: 0,
+    prestiges: 0,
+    cap: 1000,
+    stats: { totalRolls: 0 },
+    runLevels: {},
+    permLevels: {}
+};
+
+let state = JSON.parse(JSON.stringify(baseState)); // Deep copy
+let runtime = { consecutiveRolls: 0, lastRollTime: 0 };
+
+// Configuration for Upgrades
+const runUpgrades = {
+    addDie: { 
+        name: "+1 Die", desc: "Roll an extra die.", 
+        baseCost: 50, costMult: 1.6, 
+        effect: (lvl) => 1 + lvl 
+    },
+    addModifier: { 
+        name: "+Roll Value", desc: "Adds fixed value to total.", 
+        baseCost: 100, costMult: 1.8, 
+        effect: (lvl) => lvl * 2 
+    },
+    addCrit: { 
+        name: "Crit Chance", desc: "+5% chance for 2x roll.", 
+        baseCost: 150, costMult: 2.0, maxLevel: 10,
+        effect: (lvl) => lvl * 5 
+    },
+    rollSpeed: {
+        name: "Roll Speed", desc: "-10% roll cooldown.",
+        baseCost: 200, costMult: 2.1,
+        effect: (lvl) => Math.max(0.1, 1 - lvl * 0.1)
+    },
+    luckyRoll: {
+        name: "Lucky Roll", desc: "+2% chance to reroll low rolls.",
+        baseCost: 250, costMult: 2.2,
+        effect: (lvl) => lvl * 2
+    },
+    streakBonus: {
+        name: "Streak Bonus", desc: "+3% per consecutive roll.",
+        baseCost: 400, costMult: 2.4,
+        effect: (lvl) => 1 + (runtime.consecutiveRolls * lvl * 0.03)
+    },
+    critMult: {
+        name: "Crit Multiplier", desc: "+0.5x crit bonus.",
+        baseCost: 500, costMult: 2.5,
+        effect: (lvl) => 2 + lvl * 0.5
+    },
+    goldenDie: {
+        name: "Golden Die", desc: "1% chance for 5x reward.",
+        baseCost: 600, costMult: 2.6,
+        effect: (lvl) => lvl * 0.01
+    },
+    dieFaces: {
+        name: "Die Faces", desc: "+1 max face per die.",
+        baseCost: 750, costMult: 2.7,
+        effect: (lvl) => 6 + lvl
+    },
+    comboMult: {
+        name: "Combo Multiplier", desc: "+10% for matching dice.",
+        baseCost: 900, costMult: 2.8,
+        effect: (lvl) => 1 + lvl * 0.1
+    },
+    megaRoll: {
+        name: "Mega Roll", desc: "Every 20 rolls: 3x reward.",
+        baseCost: 1000, costMult: 2.9,
+        effect: (lvl) => lvl
+    },
+    perfectRoll: {
+        name: "Perfect Roll", desc: "All 6s = 10x reward.",
+        baseCost: 1200, costMult: 3.0,
+        effect: (lvl) => lvl * 10
+    },
+    rollChain: {
+        name: "Roll Chain", desc: "+1% chain bonus per roll.",
+        baseCost: 1500, costMult: 3.1,
+        effect: (lvl) => 1 + (runtime.consecutiveRolls * lvl * 0.01)
+    },
+    dieAura: {
+        name: "Die Aura", desc: "+2% global multiplier.",
+        baseCost: 1800, costMult: 3.2,
+        effect: (lvl) => 1 + lvl * 0.02
+    },
+    ultimateRoll: {
+        name: "Ultimate Roll", desc: "Every 50 rolls: 10x reward.",
+        baseCost: 2000, costMult: 3.3,
+        effect: (lvl) => lvl
+    },
+    divineCrit: {
+        name: "Divine Crit", desc: "+2% chance for 3x crit.",
+        baseCost: 2500, costMult: 3.4,
+        effect: (lvl) => lvl * 2
+    },
+    rollEcho: {
+        name: "Roll Echo", desc: "+5% echo multiplier.",
+        baseCost: 3000, costMult: 3.5,
+        effect: (lvl) => 1 + lvl * 0.05
+    },
+    burstRoll: {
+    name: "Burst Roll", desc: "+1 extra die every 500 rolls.",
+    baseCost: 4000, costMult: 6.5,
+    effect: (lvl) => Math.floor(state.stats.totalRolls / 500) * lvl
+    },
+};
+
+const permUpgrades = {
+    startCredits: { 
+        name: "Head Start", desc: "+1000 Credits after reset.", 
+        baseCost: 1, costMult: 2.0, 
+        effect: (lvl) => lvl * 1000 
+    },
+    globalMult: { 
+        name: "Global Mult", desc: "+20% to all rolls.", 
+        baseCost: 2, costMult: 2.5, 
+        effect: (lvl) => 1 + (lvl * 0.2) 
+    },
+    autoRoll: { 
+        name: "Auto-Roller", desc: "Rolls automatically over time.", 
+        baseCost: 3, costMult: 3.0, maxLevel: 5,
+        effect: (lvl) => lvl > 0 ? (1000 / lvl) : 0 // interval in ms
+    },
+    shardMult: { 
+        name: "Shard Yield", desc: "+1 Shard per prestige.", 
+        baseCost: 5, costMult: 4.0, 
+        effect: (lvl) => lvl 
+    },
+    creditCap: {
+        name: "Vault Expansion", desc: "+25% credit cap scaling.",
+        baseCost: 8, costMult: 3.5,
+        effect: (lvl) => 1 + lvl * 0.25
+    },
+    prestigeBonus: {
+        name: "Prestige Echo", desc: "+10% shard gain per prestige.",
+        baseCost: 10, costMult: 4.0,
+        effect: (lvl) => 1 + (state.prestiges * lvl * 0.1)
+    },
+    autoSpeed: {
+        name: "Auto Speed", desc: "-15% auto-roll delay.",
+        baseCost: 12, costMult: 3.8,
+        effect: (lvl) => Math.max(0.1, 1 - lvl * 0.15)
+    },
+    globalCrit: {
+        name: "Global Crit", desc: "+5% crit chance.",
+        baseCost: 15, costMult: 4.2,
+        effect: (lvl) => lvl * 5
+    },
+    shardEfficiency: {
+        name: "Shard Efficiency", desc: "+30% shard gain.",
+        baseCost: 18, costMult: 4.5,
+        effect: (lvl) => 1 + lvl * 0.3
+    },
+    megaPrestige: {
+        name: "Mega Prestige", desc: "+2x prestige rewards.",
+        baseCost: 20, costMult: 5.0,
+        effect: (lvl) => 1 + lvl * 2
+    },
+    infiniteVault: {
+        name: "Infinite Vault", desc: "+50% credit cap.",
+        baseCost: 25, costMult: 5.5,
+        effect: (lvl) => 1 + lvl * 0.5
+    },
+    divineShard: {
+        name: "Divine Shard", desc: "+100% shard gain.",
+        baseCost: 30, costMult: 6.0,
+        effect: (lvl) => 1 + lvl
+    },
+    eternalMult: {
+        name: "Eternal Mult", desc: "+50% global multiplier.",
+        baseCost: 40, costMult: 6.5,
+        effect: (lvl) => 1 + lvl * 0.5
+    },
+    autoMastery: {
+        name: "Auto Mastery", desc: "Auto-roll speed x2.",
+        baseCost: 50, costMult: 7.0, maxLevel: 1,
+        effect: (lvl) => lvl > 0 ? 2 : 1
+    },
+    prestigeCascade: {
+        name: "Prestige Cascade", desc: "+20% per prestige level.",
+        baseCost: 60, costMult: 7.5,
+        effect: (lvl) => 1 + (state.prestiges * lvl * 0.2)
+    },
+    ultimateCrit: {
+        name: "Ultimate Crit", desc: "+10% divine crit chance.",
+        baseCost: 75, costMult: 8.0,
+        effect: (lvl) => lvl * 10
+    },
+    cosmicVault: {
+        name: "Cosmic Vault", desc: "+200% credit cap.",
+        baseCost: 100, costMult: 9.0,
+        effect: (lvl) => 1 + lvl * 2
+    }
+};
+
+// --- CORE MECHANICS ---
+function calculateCost(base, mult, level) {
+    return Math.floor(base * Math.pow(mult, level));
+}
+
+function rollDice() {
+    if (state.credits >= state.cap) return; // Frozen during prestige
+
+    state.stats.totalRolls++;
+    runtime.consecutiveRolls++;
+    playSound('roll');
+
+    // Calculate dice parameters
+    let diceCount = Math.max(1, (runUpgrades.addDie.effect(state.runLevels.addDie || 0) || 0) + (runUpgrades.burstRoll.effect(state.runLevels.burstRoll || 0) || 0));
+    const maxFace = Math.max(1, runUpgrades.dieFaces.effect(state.runLevels.dieFaces || 0) || 6);
+    const modifier = runUpgrades.addModifier.effect(state.runLevels.addModifier || 0) || 0;
+    const luckyChance = runUpgrades.luckyRoll.effect(state.runLevels.luckyRoll || 0) || 0;
+
+    let rollTotal = 0;
+    const diceResults = [];
+
+    // Roll each die
+    for (let i = 0; i < diceCount; i++) {
+        let result = Math.floor(Math.random() * maxFace) + 1;
+        if (luckyChance > 0 && Math.random() * 100 < luckyChance && result < maxFace / 2) {
+            result = Math.floor(Math.random() * maxFace) + 1; // Reroll
+        }
+        diceResults.push(result);
+        rollTotal += result;
+    }
+
+    // Apply modifiers
+    rollTotal += modifier;
+
+    // Streak bonus
+    const streakMult = runUpgrades.streakBonus.effect(state.runLevels.streakBonus || 0);
+    rollTotal = Math.floor(rollTotal * streakMult);
+
+    // Roll chain
+    const chainMult = runUpgrades.rollChain.effect(state.runLevels.rollChain || 0);
+    rollTotal = Math.floor(rollTotal * chainMult);
+
+    // Combo multiplier
+    const unique = new Set(diceResults);
+    if (unique.size === 1 && diceCount > 1) {
+        const comboMult = runUpgrades.comboMult.effect(state.runLevels.comboMult || 0);
+        rollTotal = Math.floor(rollTotal * comboMult);
+    }
+
+    // Die aura
+    const auraMult = runUpgrades.dieAura.effect(state.runLevels.dieAura || 0);
+    rollTotal = Math.floor(rollTotal * auraMult);
+
+    // Roll echo
+    const echoMult = runUpgrades.rollEcho.effect(state.runLevels.rollEcho || 0);
+    rollTotal = Math.floor(rollTotal * echoMult);
+
+    // Mega roll
+    if (state.stats.totalRolls % 20 === 0) {
+        rollTotal *= runUpgrades.megaRoll.effect(state.runLevels.megaRoll || 0) * 3;
+    }
+
+    // Ultimate roll
+    if (state.stats.totalRolls % 50 === 0) {
+        rollTotal *= runUpgrades.ultimateRoll.effect(state.runLevels.ultimateRoll || 0) * 10;
+    }
+
+    // Perfect roll
+    if (diceResults.every(r => r === maxFace)) {
+        rollTotal *= runUpgrades.perfectRoll.effect(state.runLevels.perfectRoll || 0);
+    }
+
+    // Ensure we never drop to zero
+    rollTotal = Math.max(1, Math.floor(rollTotal));
+
+    // Calculate crit
+    let critChance = runUpgrades.addCrit.effect(state.runLevels.addCrit || 0);
+    critChance += permUpgrades.globalCrit.effect(state.permLevels.globalCrit || 0);
+    let critMult = runUpgrades.critMult.effect(state.runLevels.critMult || 0);
+    let isCrit = false;
+    let isDivine = false;
+
+    if (Math.random() * 100 < critChance) {
+        rollTotal = Math.floor(rollTotal * critMult);
+        isCrit = true;
+    }
+
+    // Divine crit
+    const divineChance = runUpgrades.divineCrit.effect(state.runLevels.divineCrit || 0) + permUpgrades.ultimateCrit.effect(state.permLevels.ultimateCrit || 0);
+    if (Math.random() * 100 < divineChance) {
+        rollTotal *= 3;
+        isDivine = true;
+    }
+
+    // Golden die
+    const goldenChance = runUpgrades.goldenDie.effect(state.runLevels.goldenDie || 0);
+    if (Math.random() * 100 < goldenChance) {
+        rollTotal *= 5;
+    }
+
+    // Global multipliers
+    let globalMult = permUpgrades.globalMult.effect(state.permLevels.globalMult || 0);
+    globalMult *= permUpgrades.eternalMult.effect(state.permLevels.eternalMult || 0);
+    rollTotal = Math.floor(rollTotal * globalMult);
+
+    // Add to bank
+    state.credits += rollTotal;
+
+    // Particles
+    spawnParticles();
+
+    // Trigger UI updates & Animations
+    renderDice(diceResults);
+    showRollFeedback(rollTotal, isCrit || isDivine);
+    
+    // Check Prestige Condition
+    if (state.credits >= state.cap) {
+        state.credits = state.cap; // Cap it visually
+        triggerPrestige();
+    }
+    
+    updateUI();
+}
+
+function spawnParticles() {
+    for (let i = 0; i < 10; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.left = (Math.random() * 100) + 'vw';
+        particle.style.top = (Math.random() * 100) + 'vh';
+        document.body.appendChild(particle);
+        setTimeout(() => particle.remove(), 1000);
+    }
+}
+
+function triggerPrestige() {
+    playSound('prestige');
+    const overlay = document.getElementById('glitch-overlay');
+    overlay.style.display = 'flex';
+
+    // Calculate Rewards
+    const baseShards = 1 + state.prestiges;
+    const bonusShards = permUpgrades.shardMult.effect(state.permLevels.shardMult || 0);
+    let totalShards = baseShards + bonusShards;
+    totalShards *= permUpgrades.shardEfficiency.effect(state.permLevels.shardEfficiency || 0);
+    totalShards *= permUpgrades.divineShard.effect(state.permLevels.divineShard || 0);
+    totalShards *= permUpgrades.prestigeBonus.effect(state.permLevels.prestigeBonus || 0);
+    totalShards *= permUpgrades.megaPrestige.effect(state.permLevels.megaPrestige || 0);
+    totalShards *= permUpgrades.prestigeCascade.effect(state.permLevels.prestigeCascade || 0);
+    totalShards = Math.floor(totalShards);
+
+    setTimeout(() => {
+        // Execute Reset
+        state.shards += totalShards;
+        state.prestiges++;
+        
+        // Increase Cap Exponentially (1.5x)
+        let baseCap = 1000 * Math.pow(1.5, state.prestiges);
+        baseCap *= permUpgrades.creditCap.effect(state.permLevels.creditCap || 0);
+        baseCap *= permUpgrades.infiniteVault.effect(state.permLevels.infiniteVault || 0);
+        baseCap *= permUpgrades.cosmicVault.effect(state.permLevels.cosmicVault || 0);
+        state.cap = Math.floor(baseCap);
+
+        // Reset Run State
+        state.credits = permUpgrades.startCredits.effect(state.permLevels.startCredits || 0);
+        state.runLevels = {};
+        for (const key in runUpgrades) {
+            state.runLevels[key] = 0;
+        }
+        runtime.consecutiveRolls = 0;
+
+        // Cleanup & Save
+        saveGame();
+        overlay.style.display = 'none';
+        setupAutoRoll();
+        updateUI();
+        document.getElementById('dice-area').innerHTML = ''; // Clear dice
+        document.getElementById('roll-feedback').innerText = `+${totalShards} SHARDS GAINED!`;
+    }, 2000);
+}
+
+function buyRunUpgrade(key) {
+    const config = runUpgrades[key];
+    const lvl = state.runLevels[key];
+    const cost = calculateCost(config.baseCost, config.costMult, lvl);
+
+    if (state.credits >= cost && (config.maxLevel === undefined || lvl < config.maxLevel)) {
+        state.credits -= cost;
+        state.runLevels[key]++;
+        playSound('buy');
+        updateUI();
+    }
+}
+
+function buyPermUpgrade(key) {
+    const config = permUpgrades[key];
+    const lvl = state.permLevels[key];
+    const cost = calculateCost(config.baseCost, config.costMult, lvl);
+
+    if (state.shards >= cost && (config.maxLevel === undefined || lvl < config.maxLevel)) {
+        state.shards -= cost;
+        state.permLevels[key]++;
+        playSound('buy');
+        if (key === 'autoRoll') setupAutoRoll();
+        updateUI();
+    }
+}
+
+// --- SYSTEM LOOP & AUTOROLL ---
+let autoRollInterval = null;
+
+function setupAutoRoll() {
+    if (autoRollInterval) clearInterval(autoRollInterval);
+    let intervalMs = permUpgrades.autoRoll.effect(state.permLevels.autoRoll || 0);
+    
+    if (intervalMs > 0) {
+        intervalMs *= permUpgrades.autoSpeed.effect(state.permLevels.autoSpeed || 0);
+        intervalMs /= permUpgrades.autoMastery.effect(state.permLevels.autoMastery || 0);
+        intervalMs = Math.max(50, intervalMs); // Minimum 50ms
+        
+        document.getElementById('ui-autoroll-status').innerText = `Active (${(1000/intervalMs).toFixed(1)}/sec)`;
+        document.getElementById('ui-autoroll-status').classList.add('highlight');
+        autoRollInterval = setInterval(() => {
+            if (state.credits < state.cap) rollDice();
+        }, intervalMs);
+    } else {
+        document.getElementById('ui-autoroll-status').innerText = "Locked";
+    }
+}
+
+// --- RENDER & UI ---
+function renderDice(results) {
+    const container = document.getElementById('dice-area');
+    container.innerHTML = ''; // Clear
+    results.forEach(val => {
+        const d = document.createElement('div');
+        d.className = 'die roll-anim';
+        d.innerText = val;
+        container.appendChild(d);
+    });
+}
+
+function showRollFeedback(amount, isCrit) {
+    const fb = document.getElementById('roll-feedback');
+    fb.innerText = `+${amount}`;
+    fb.className = isCrit ? 'crit-text' : 'highlight';
+    
+    // Remove class to allow re-trigger
+    setTimeout(() => { fb.className = ''; }, 500);
+}
+
+function buildUpgradeUI() {
+    // Build Run Upgrades
+    const runContainer = document.getElementById('run-upgrades-container');
+    runContainer.innerHTML = '';
+    for (const [key, config] of Object.entries(runUpgrades)) {
+        const div = document.createElement('div');
+        div.className = 'upgrade-item';
+        div.innerHTML = `
+            <div>
+                <strong>${config.name} (Lvl <span id="lvl-${key}"></span>)</strong><br>
+                <small>${config.desc}</small>
+            </div>
+            <button id="btn-${key}">Cost: <span id="cost-${key}"></span> C</button>
+        `;
+        runContainer.appendChild(div);
+        document.getElementById(`btn-${key}`).onclick = () => buyRunUpgrade(key);
+    }
+
+    // Build Perm Upgrades
+    const permContainer = document.getElementById('perm-upgrades-container');
+    permContainer.innerHTML = '';
+    for (const [key, config] of Object.entries(permUpgrades)) {
+        const div = document.createElement('div');
+        div.className = 'upgrade-item';
+        div.innerHTML = `
+            <div>
+                <strong>${config.name} (Lvl <span id="plvl-${key}"></span>)</strong><br>
+                <small>${config.desc}</small>
+            </div>
+            <button id="pbtn-${key}" style="border-color: var(--accent-purple); color: var(--accent-purple);">
+                Cost: <span id="pcost-${key}"></span> S
+            </button>
+        `;
+        permContainer.appendChild(div);
+        document.getElementById(`pbtn-${key}`).onclick = () => buyPermUpgrade(key);
+    }
+}
+
+function updateUI() {
+    // Header
+    document.getElementById('ui-credits').innerText = Math.floor(state.credits);
+    document.getElementById('ui-cap').innerText = state.cap;
+    document.getElementById('ui-shards').innerText = state.shards;
+    document.getElementById('ui-prestiges').innerText = state.prestiges;
+
+    // Run Upgrades
+    for (const [key, config] of Object.entries(runUpgrades)) {
+        const lvl = state.runLevels[key];
+        const cost = calculateCost(config.baseCost, config.costMult, lvl);
+        const maxed = config.maxLevel !== undefined && lvl >= config.maxLevel;
+        
+        document.getElementById(`lvl-${key}`).innerText = maxed ? "MAX" : lvl;
+        const btn = document.getElementById(`btn-${key}`);
+        
+        if (maxed) {
+            btn.innerText = "MAXED";
+            btn.disabled = true;
+        } else {
+            document.getElementById(`cost-${key}`).innerText = cost;
+            btn.disabled = state.credits < cost || state.credits >= state.cap;
+        }
+    }
+
+    // Perm Upgrades
+    for (const [key, config] of Object.entries(permUpgrades)) {
+        const lvl = state.permLevels[key];
+        const cost = calculateCost(config.baseCost, config.costMult, lvl);
+        const maxed = config.maxLevel !== undefined && lvl >= config.maxLevel;
+        
+        document.getElementById(`plvl-${key}`).innerText = maxed ? "MAX" : lvl;
+        const btn = document.getElementById(`pbtn-${key}`);
+        
+        if (maxed) {
+            btn.innerText = "MAXED";
+            btn.disabled = true;
+        } else {
+            document.getElementById(`pcost-${key}`).innerText = cost;
+            btn.disabled = state.shards < cost || state.credits >= state.cap;
+        }
+    }
+
+    // Main Button
+    document.getElementById('btn-roll').disabled = state.credits >= state.cap;
+}
+
+// --- SAVE SYSTEM (localStorage) ---
+function saveGame() {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+}
+
+function loadGame() {
+    const saved = localStorage.getItem(SAVE_KEY);
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            // Deep merge to ensure new updates don't break old saves
+            state = { ...baseState, ...parsed };
+            state.runLevels = { ...baseState.runLevels, ...parsed.runLevels };
+            state.permLevels = { ...baseState.permLevels, ...parsed.permLevels };
+            // Ensure all new upgrades are initialized
+            for (const key in runUpgrades) {
+                if (!(key in state.runLevels)) state.runLevels[key] = 0;
+            }
+            for (const key in permUpgrades) {
+                if (!(key in state.permLevels)) state.permLevels[key] = 0;
+            }
+        } catch (e) {
+            console.error("Save file corrupted. Starting fresh.");
+        }
+    }
+    // Initialize if not loaded
+    for (const key in runUpgrades) {
+        if (!(key in state.runLevels)) state.runLevels[key] = 0;
+    }
+    for (const key in permUpgrades) {
+        if (!(key in state.permLevels)) state.permLevels[key] = 0;
+    }
+}
+
+// --- INIT ---
+document.getElementById('btn-roll').addEventListener('click', rollDice);
+
+function init() {
+    loadGame();
+    buildUpgradeUI();
+    setupAutoRoll();
+    updateUI();
+    
+    // Auto-save loop
+    setInterval(saveGame, 5000);
+}
+
+window.onload = init;
+
+</script>
+</body>
+</html>

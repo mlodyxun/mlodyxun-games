@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aetherial Shift v7.1</title>
+    <style>
+        /* === CORE THEME & VARIABLES === */
+        :root {
+            --bg: #030305; --panel: #0a0a10; --accent: #ff0055;
+            --text: #e0f0e0; --card-bg: #111118; --shield: #00e5ff;
+            --heal: #00ff66; --rare: #ffaa00; --boss: #cc00ff;
+            --burn: #ff4500; --weak: #888888; --vuln: #aa00ff;
+            --ui-border: #222233;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        body { 
+            margin: 0; padding: 0; background: #000; color: var(--text); 
+            font-family: 'VT323', monospace; font-size: 1.2rem;
+            display: flex; justify-content: center; align-items: center; 
+            height: 100vh; overflow: hidden; user-select: none;
+        }
+
+        /* === POST-PROCESSING CRT FX === */
+        @keyframes scanlines {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 10px; }
+        }
+        
+        body::before {
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+            background-size: 100% 4px, 4px 100%; pointer-events: none; z-index: 9999;
+            animation: scanlines 1s linear infinite;
+        }
+
+        body::after {
+            content: ""; position: absolute; inset: 0;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.9); pointer-events: none; z-index: 9998;
+        }
+
+        #game-container { 
+            width: 1024px; height: 768px; background: var(--bg); 
+            border: 4px solid var(--ui-border); box-shadow: 0 0 40px rgba(0,229,255,0.1);
+            position: relative; overflow: hidden; transition: background 1.5s ease-in-out;
+            image-rendering: pixelated;
+        }
+
+        .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10; background: rgba(3,3,5,0.95); }
+        .screen.active { display: flex; }
+        #screen-battle { background: transparent; } 
+
+        /* === TYPOGRAPHY & BUTTONS === */
+        h1 { color: var(--accent); font-size: 5rem; text-shadow: 4px 4px 0px #300; margin-bottom: 10px; letter-spacing: 4px; text-transform: uppercase; text-align: center; font-weight: normal;}
+        h2 { color: var(--shield); font-size: 3rem; margin-bottom: 20px; text-shadow: 2px 2px 0px #000; font-weight: normal;}
+        p { color: #bbb; font-size: 1.5rem; text-align: center; line-height: 1.2; max-width: 650px;}
+        
+        button { 
+            background: var(--panel); color: var(--text); border: 2px solid var(--ui-border); 
+            padding: 12px 24px; font-size: 1.8rem; cursor: pointer; font-family: inherit;
+            text-transform: uppercase; transition: all 0.1s steps(2); margin: 10px;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.8);
+        }
+        button:hover { background: var(--accent); border-color: #fff; transform: translate(-2px, -2px); box-shadow: 6px 6px 0 rgba(0,0,0,0.8); color: #fff;}
+        button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(0,0,0,0.8); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: 4px 4px 0 rgba(0,0,0,0.8); background: var(--panel); border-color: var(--ui-border); color: #555;}
+
+        /* === TOP BAR (HUD) === */
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 50px; background: rgba(0,0,0,0.9); border-bottom: 2px solid var(--ui-border); display: flex; justify-content: space-between; align-items: center; padding: 0 20px; box-sizing: border-box; z-index: 50; font-size: 1.5rem;}
+        #hud-artifacts { display: flex; gap: 8px; }
+        .artifact-icon { width: 34px; height: 34px; background: #111; border: 2px solid #444; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; cursor: help; position: relative;}
+        .artifact-icon:hover::after, .status-icon:hover::after { content: attr(data-tooltip); position: absolute; top: 110%; left: 50%; transform: translateX(-50%); background: #000; border: 2px solid #fff; padding: 5px 10px; font-size: 1.2rem; white-space: nowrap; z-index: 1000; pointer-events: none;}
+
+        /* === BATTLE ARENA === */
+        #battle-stage { width: 100%; height: 55%; margin-top: 50px; display: flex; justify-content: space-evenly; align-items: flex-end; padding-bottom: 30px; position: relative;}
+        .entity { display: flex; flex-direction: column; align-items: center; width: 300px; position: relative; z-index: 20;}
+        
+        .sprite-container { height: 160px; display: flex; align-items: flex-end; position: relative;}
+        .sprite { font-size: 8rem; filter: drop-shadow(0 10px 0px rgba(0,0,0,0.8)); transition: transform 0.1s;}
+        .boss-sprite { font-size: 10rem; animation: float 2s steps(4) infinite;}
+        
+        .intent-box { position: absolute; top: -35px; background: #000; border: 2px solid #fff; padding: 4px 12px; font-size: 1.6rem; display: flex; align-items: center; gap: 5px; box-shadow: 4px 4px 0 #000;}
+
+        /* === HEALTH & STATUS === */
+        .stats-panel { width: 100%; background: rgba(0,0,0,0.9); border: 2px solid var(--ui-border); padding: 8px; margin-top: 15px; box-sizing: border-box; box-shadow: 4px 4px 0 rgba(0,0,0,0.8);}
+        .stats-header { display: flex; justify-content: space-between; font-size: 1.2rem; margin-bottom: 5px; color: #ccc;}
+        .health-bar-bg { width: 100%; height: 18px; background: #111; position: relative; overflow: hidden; border: 2px solid #333;}
+        .health-fill { height: 100%; background: var(--accent); transition: width 0.2s steps(10);}
+        .shield-fill { height: 100%; background: var(--shield); position: absolute; top: 0; left: 0; transition: width 0.2s steps(10); opacity: 0.8; border-right: 2px solid #fff;}
+        .status-container { display: flex; gap: 6px; margin-top: 8px; min-height: 28px;}
+        .status-icon { background: #000; border: 2px solid #555; padding: 2px 8px; font-size: 1.2rem; display: flex; align-items: center; gap: 4px; cursor: help;}
+
+        /* === BATTLE DASHBOARD === */
+        #battle-dash { width: 100%; height: 8%; background: #000; border-top: 2px solid var(--ui-border); border-bottom: 2px solid var(--ui-border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-sizing: border-box;}
+        .energy-orb { font-size: 2rem; color: var(--shield); display: flex; align-items: center; gap: 10px;}
+        .energy-orb span { font-size: 2.5rem; text-shadow: 2px 2px 0 #000;}
+
+        /* === CARDS (10% SMALLER) === */
+        #battle-hand { width: 100%; height: calc(100% - 55% - 50px - 8%); background: #08080a; display: flex; justify-content: center; align-items: center; gap: 12px; padding: 20px; box-sizing: border-box; overflow-x: auto; overflow-y: hidden;}
+        
+        .card { 
+            width: 144px;
+            height: 207px;
+            background: var(--card-bg); border: 2px solid #445; 
+            display: flex; flex-direction: column; cursor: pointer; transition: all 0.1s; position: relative; flex-shrink: 0;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.8);
+        }
+        .card.rare { border-color: var(--rare); background: #1a1a00;}
+        .card.unplayable { filter: grayscale(1) brightness(0.5); cursor: not-allowed; }
+        
+        .card:not(.unplayable):hover { 
+            transform: translateY(8px) scale(0.95); 
+            border-color: var(--shield); 
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.9), 1px 1px 0 rgba(0,0,0,0.5); 
+            z-index: 100; 
+        }
+        
+        .card-cost { position: absolute; top: -2px; left: -2px; background: var(--shield); color: #000; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; border: 2px solid #fff; z-index: 2;}
+        .card-art { height: 45%; background: #000; display: flex; justify-content: center; align-items: center; font-size: 3.5rem; border-bottom: 2px solid #334;}
+        .card.atk .card-art { background: #200; }
+        .card.def .card-art { background: #012; }
+        .card.util .card-art { background: #102; }
+        .card-title { font-size: 1.1rem; text-align: center; padding: 6px 4px; text-transform: uppercase; background: #000; border-bottom: 2px solid #334;}
+        .card.rare .card-title { color: var(--rare); }
+        .card-desc { font-size: 0.9rem; padding: 8px; text-align: center; color: #ccc; flex-grow: 1; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); line-height: 1.1;}
+
+        /* === ANIMATIONS & FX === */
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes lunge { 0% { transform: translateX(0); } 40% { transform: translateX(30px); } 100% { transform: translateX(0); } }
+        @keyframes lunge-enemy { 0% { transform: translateX(0); } 40% { transform: translateX(-30px); } 100% { transform: translateX(0); } }
+        @keyframes hit-shake { 0%, 100% { transform: translate(0,0); filter: brightness(1); } 20% { transform: translate(-8px, -4px); filter: brightness(2) hue-rotate(-40deg); } 40% { transform: translate(6px, 4px); filter: brightness(2) hue-rotate(-40deg); } 60% { transform: translate(-4px, 6px); } 80% { transform: translate(4px, -4px); } }
+        @keyframes screen-shake { 0%, 100% { transform: translate(0,0); } 20% { transform: translate(-10px, 0); } 40% { transform: translate(10px, 0); } 60% { transform: translate(-10px, 0); } 80% { transform: translate(10px, 0); } }
+        @keyframes pop-up { 0% { opacity: 0; transform: translateY(10px) scale(0.8); } 20% { opacity: 1; transform: translateY(0) scale(1.2); } 100% { opacity: 0; transform: translateY(-40px) scale(1); } }
+        @keyframes particle-burst { 0% { transform: translate(0,0); opacity: 1; } 100% { transform: translate(var(--tx), var(--ty)); opacity: 0; } }
+
+        .anim-lunge { animation: lunge 0.2s steps(3); }
+        .anim-lunge-enemy { animation: lunge-enemy 0.2s steps(3); }
+        .anim-shake { animation: hit-shake 0.3s steps(4); }
+        .container-shake { animation: screen-shake 0.3s steps(4); }
+
+        .fct { position: absolute; font-size: 3rem; pointer-events: none; animation: pop-up 1s forwards steps(10); z-index: 1000; text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000; }
+        .particle { position: absolute; width: 12px; height: 12px; background: #fff; pointer-events: none; animation: particle-burst 0.5s forwards steps(5); z-index: 900;}
+
+        /* === OVERLAYS === */
+        #deck-viewer { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; flex-direction: column; padding: 40px; overflow-y: auto; align-items: center;}
+        #deck-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 20px; max-width: 900px;}
+        #deck-grid .card { margin: 5px; cursor: default;}
+        #deck-grid .card:hover { transform: none; box-shadow: 4px 4px 0 rgba(0,0,0,0.8); border-color: #445;}
+
+        .draft-grid { display: flex; gap: 25px; margin: 30px 0; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    
+    <div id="hud">
+        <div>SECTOR: <span id="ui-depth" style="color:var(--accent)">1/50</span></div>
+        <div id="hud-artifacts"></div>
+        <div style="display:flex; gap: 15px;">
+            <button onclick="SFX.click(); UI.toggleDeckViewer()" style="margin:0; padding: 4px 10px; font-size:1.2rem;">DECK</button>
+            <div id="ui-deck-count" style="color:#aaa; display:flex; align-items:center;">[0]</div>
+        </div>
+    </div>
+
+    <div id="screen-menu" class="screen active">
+        <h1>AETHERIAL SHIFT</h1>
+        <h2 style="color:var(--text); font-size:1.5rem;">v7.1 REIMAGINED CARDS</h2>
+        <p>A corrupted system requires purging. Build your code, manage your aether, and dive into the Rift.</p>
+        <button onclick="Game.startRun()" style="margin-top: 40px; font-size: 2.5rem; padding: 20px 50px;">EXECUTE</button>
+    </div>
+
+    <div id="screen-battle" class="screen">
+        <div id="battle-stage">
+            <div class="entity" id="player">
+                <div class="sprite-container"><div class="sprite" id="player-sprite">🧙‍♂️</div></div>
+                <div class="stats-panel">
+                    <div class="stats-header"><span>WEAVER</span><span id="player-hp-txt">60/60</span></div>
+                    <div class="health-bar-bg"><div class="health-fill" id="player-hp-fill"></div><div class="shield-fill" id="player-shield-fill"></div></div>
+                    <div class="status-container" id="player-statuses"></div>
+                </div>
+            </div>
+            <div class="entity" id="enemy">
+                <div class="intent-box" id="enemy-intent">⚔️ 10</div>
+                <div class="sprite-container"><div class="sprite" id="enemy-sprite">👾</div></div>
+                <div class="stats-panel">
+                    <div class="stats-header"><span id="enemy-name" style="color:var(--boss)">ANOMALY</span><span id="enemy-hp-txt">100/100</span></div>
+                    <div class="health-bar-bg"><div class="health-fill" id="enemy-hp-fill"></div><div class="shield-fill" id="enemy-shield-fill"></div></div>
+                    <div class="status-container" id="enemy-statuses"></div>
+                </div>
+            </div>
+        </div>
+        <div id="battle-dash">
+            <div class="energy-orb">⚡ <span id="ui-aether">3</span></div>
+            <div style="display:flex; gap: 20px; align-items:center;">
+                <div style="color:#888; font-size:1.2rem;">DRAW: <span id="ui-draw">0</span> | DISCARD: <span id="ui-discard">0</span></div>
+                <button id="btn-end-turn" onclick="Game.endTurn()" style="font-size: 1.5rem;">END TURN</button>
+            </div>
+        </div>
+        <div id="battle-hand"></div>
+    </div>
+
+    <div id="screen-reward" class="screen">
+        <h2 id="reward-title">PROCESS TERMINATED</h2>
+        <p>Draft a new subroutine into your code:</p>
+        <div class="draft-grid" id="reward-cards"></div>
+        <button onclick="SFX.click(); Game.skipReward()">SKIP</button>
+    </div>
+
+    <div id="screen-forge" class="screen">
+        <h2>SAFE ZONE: THE FORGE</h2>
+        <p>The rift temporarily stabilizes. Choose one action:</p>
+        <div style="display:flex; gap: 20px; margin-top: 20px;">
+            <button onclick="SFX.click(); Game.forgeAction('heal')" style="padding: 20px;">🔧 REPAIR<br><span style="font-size:1.2rem; color:var(--heal)">Heal 30% Max HP</span></button>
+            <button onclick="SFX.click(); Game.forgeAction('purge')" style="padding: 20px;">🧪 PURGE<br><span style="font-size:1.2rem; color:#aaa">Remove 1 Card</span></button>
+        </div>
+    </div>
+    
+    <div id="screen-purge" class="screen">
+        <h2>SELECT A SUBROUTINE TO PURGE</h2>
+        <div id="purge-grid" class="draft-grid" style="flex-wrap: wrap; justify-content: center; overflow-y: auto; max-height: 500px;"></div>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+        <h1 id="over-title">LINK SEVERED</h1>
+        <p id="over-desc" style="font-size: 2rem; margin-bottom: 30px;">Fatal Exception Occurred.</p>
+        <button onclick="SFX.click(); location.reload()">REBOOT SYSTEM</button>
+    </div>
+
+    <div id="deck-viewer">
+        <h2>CURRENT ARRAY</h2>
+        <button onclick="SFX.click(); UI.toggleDeckViewer()" style="position:absolute; top: 20px; right: 20px;">CLOSE</button>
+        <div id="deck-grid"></div>
+    </div>
+
+</div>
+
+<script>
+/**
+ * AETHERIAL SHIFT v7.1
+ * Reimagined Cyber Cards + New Heal Subroutines
+ */
+
+// === PROCEDURAL AUDIO ENGINE ===
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let actx;
+
+const SFX = {
+    init: () => { if (!actx) actx = new AudioCtx(); },
+    
+    _tone: (freq, type, dur, vol) => {
+        if (!actx) return;
+        let osc = actx.createOscillator(), gain = actx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, actx.currentTime);
+        gain.gain.setValueAtTime(vol, actx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + dur);
+        osc.connect(gain); gain.connect(actx.destination);
+        osc.start(); osc.stop(actx.currentTime + dur);
+    },
+    
+    _noise: (dur, vol) => {
+        if (!actx) return;
+        let bufSize = actx.sampleRate * dur, buffer = actx.createBuffer(1, bufSize, actx.sampleRate);
+        let data = buffer.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+        let noise = actx.createBufferSource(), gain = actx.createGain(), filter = actx.createBiquadFilter();
+        noise.buffer = buffer; filter.type = 'lowpass'; filter.frequency.value = 800;
+        gain.gain.setValueAtTime(vol, actx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + dur);
+        noise.connect(filter); filter.connect(gain); gain.connect(actx.destination);
+        noise.start();
+    },
+
+    hover: () => SFX._tone(350, 'square', 0.05, 0.01),
+    click: () => SFX._tone(800, 'square', 0.1, 0.02),
+    error: () => SFX._tone(150, 'sawtooth', 0.2, 0.05),
+    atk: () => { SFX._tone(120, 'sawtooth', 0.2, 0.05); setTimeout(() => SFX._noise(0.2, 0.1), 50); },
+    def: () => { SFX._tone(400, 'sine', 0.1, 0.05); setTimeout(() => SFX._tone(600, 'sine', 0.2, 0.05), 50); },
+    hit: () => SFX._noise(0.3, 0.15),
+    heal: () => { 
+        [400, 500, 600, 800].forEach((f, i) => setTimeout(() => SFX._tone(f, 'sine', 0.2, 0.03), i * 80));
+    },
+    win: () => {
+        [400, 600, 800, 1200].forEach((f, i) => setTimeout(() => SFX._tone(f, 'square', 0.15, 0.03), i * 150));
+    },
+    lose: () => {
+        [300, 250, 200, 150].forEach((f, i) => setTimeout(() => SFX._tone(f, 'sawtooth', 0.3, 0.05), i * 300));
+    }
+};
+
+document.addEventListener('mouseover', (e) => {
+    if (e.target.tagName === 'BUTTON' && !e.target.disabled) SFX.hover();
+});
+
+// === DATABASE (REIMAGINED CARDS + HEALS) ===
+const CARDS = {
+    standard: [
+        { id: 'strike', name: 'Syntax Strike', cost: 1, type: 'atk', v: 6, art: '⚡', d: 'Deal 6 DMG.' },
+        { id: 'defend', name: 'Firewall', cost: 1, type: 'def', v: 5, art: '🧱', d: 'Gain 5 Shield.' },
+        { id: 'scorch', name: 'Logic Burn', cost: 1, type: 'atk', v: 4, status: {burn: 3}, art: '🔥', d: '4 DMG. Apply 3 Burn.' },
+        { id: 'weaken', name: 'CPU Throttle', cost: 1, type: 'atk', v: 3, status: {weak: 2}, art: '📉', d: '3 DMG. Apply 2 Weak.' },
+        { id: 'bash', name: 'Zero-Day Exploit', cost: 2, type: 'atk', v: 8, status: {vuln: 2}, art: '🔓', d: '8 DMG. Apply 2 Vulnerable.' },
+        { id: 'analyze', name: 'Packet Sniff', cost: 1, type: 'util', draw: 2, art: '📡', d: 'Draw 2 cards.' },
+        { id: 'fortify', name: 'Hardcode', cost: 2, type: 'def', v: 12, art: '🔐', d: 'Gain 12 Shield.' },
+        { id: 'quick', name: 'Ping Request', cost: 0, type: 'atk', v: 4, art: '🚀', d: 'Deal 4 DMG.' },
+        { id: 'codeboost', name: 'Code Boost', cost: 1, type: 'util', heal: 5, art: '💊', d: 'Heal 5 HP.' } /* NEW */
+    ],
+    rare: [
+        { id: 'nova', name: 'Kernel Panic', cost: 3, type: 'atk', v: 28, art: '☢️', d: 'Deal 28 DMG.' },
+        { id: 'shatter', name: 'Decryption Tool', cost: 2, type: 'util', shatter: true, art: '🔨', d: 'Remove ALL Enemy Shield.' },
+        { id: 'virus', name: 'Rootkit', cost: 2, type: 'util', status: {vuln: 3, weak: 3}, art: '🕷️', d: 'Apply 3 Vuln and 3 Weak.' },
+        { id: 'reboot', name: 'Admin Rights', cost: 0, type: 'util', energy: 2, draw: 1, art: '👑', d: 'Gain 2 Aether. Draw 1.' },
+        { id: 'vamp', name: 'Bandwidth Leech', cost: 2, type: 'atk', v: 8, heal: 8, art: '🧛', d: 'Deal 8 DMG. Heal 8 HP.' },
+        { id: 'defrag', name: 'Defragmentation', cost: 2, type: 'util', heal: 10, art: '💽', d: 'Heal 10 HP.' } /* NEW */
+    ]
+};
+
+const ARTIFACTS = [
+    { id: 'lead', name: 'Lead Plate', icon: '💿', d: 'Start combat with 10 Shield.', onStart: (s) => s.player.shield += 10 },
+    { id: 'core', name: 'Core Reactor', icon: '⚡', d: 'Max Aether increased by 1.', onPickup: (s) => s.player.maxAether += 1 },
+    { id: 'spike', name: 'Spiked Bit', icon: '⚙️', d: 'Attacks deal +2 base damage.', buffAtk: 2 },
+    { id: 'medkit', name: 'Auto-Med', icon: '💉', d: 'Heal 5 HP at start of combat.', onStart: (s) => Game.heal('player', 5) },
+    { id: 'lens', name: 'Focus Lens', icon: '🔭', d: 'Draw 1 extra card each turn.', onTurn: (s) => Game.draw(1) }
+];
+
+const ENEMY_TIERS = {
+    1: [
+        { name: 'Glitched Bat', sprite: '🦇', hp: 20, type: 'striker' },
+        { name: 'Slime Null', sprite: '🦠', hp: 25, type: 'tank' },
+        { name: 'Byte Hound', sprite: '🐺', hp: 22, type: 'striker' },
+        { name: 'Bit Swarm', sprite: '🦟', hp: 18, type: 'debuffer' }
+    ],
+    2: [
+        { name: 'Proxy Knight', sprite: '🤺', hp: 45, type: 'tank' },
+        { name: 'Data Leech', sprite: '🐛', hp: 35, type: 'debuffer' },
+        { name: 'Rogue Drone', sprite: '🛸', hp: 40, type: 'striker' },
+        { name: 'Trojan', sprite: '🐴', hp: 50, type: 'tank' },
+        { name: 'Daemon', sprite: '👹', hp: 42, type: 'striker' }
+    ],
+    3: [
+        { name: 'Phantom', sprite: '👻', hp: 70, type: 'debuffer' },
+        { name: 'Mech-Spider', sprite: '🕷️', hp: 80, type: 'tank' },
+        { name: 'Logic Bomb', sprite: '💣', hp: 60, type: 'striker' }, 
+        { name: 'Cyber-Lich', sprite: '🧟', hp: 90, type: 'debuffer' }
+    ]
+};
+
+const BOSSES = [
+    { name: 'FIREWALL WARDEN', sprite: '🧱', hp: 120, type: 'boss1' },
+    { name: 'THE ARCHIVIST', sprite: '📚', hp: 220, type: 'boss2' },
+    { name: 'MEMORY DEVOURER', sprite: '🦖', hp: 350, type: 'boss3' },
+    { name: 'THE COMPILER', sprite: '⚙️', hp: 500, type: 'boss4' },
+    { name: 'SYSTEM SOURCE', sprite: '👁️‍🗨️', hp: 800, type: 'final' }
+];
+
+// === GAME ENGINE ===
+const State = {
+    depth: 1, maxDepth: 50,
+    deck: [], hand: [], discard: [], drawPile: [],
+    player: { hp: 60, max: 60, aether: 3, maxAether: 3, shield: 0, artifacts: [], statuses: {} },
+    enemy: { name: '', sprite: '', hp: 0, max: 0, shield: 0, statuses: {}, intent: null, isBoss: false },
+    phase: 'menu', 
+    turnActive: false
+};
+
+const Utils = {
+    rand: (arr) => arr[Math.floor(Math.random() * arr.length)],
+    shuffle: (arr) => arr.map(a => ({sort: Math.random(), value: a})).sort((a, b) => a.sort - b.sort).map(a => a.value),
+    deepCopy: (obj) => JSON.parse(JSON.stringify(obj))
+};
+
+const FX = {
+    shake: (id, heavy = false) => {
+        let el = document.getElementById(id);
+        el.classList.remove('anim-shake', 'container-shake');
+        void el.offsetWidth;
+        el.classList.add(heavy ? 'container-shake' : 'anim-shake');
+    },
+    lunge: (id, isEnemy) => {
+        let el = document.getElementById(id);
+        el.classList.remove('anim-lunge', 'anim-lunge-enemy');
+        void el.offsetWidth;
+        el.classList.add(isEnemy ? 'anim-lunge-enemy' : 'anim-lunge');
+    },
+    popText: (target, text, color) => {
+        let el = document.createElement('div');
+        el.className = 'fct';
+        el.style.color = color;
+        el.innerText = text;
+        let rect = document.getElementById(target + '-sprite').getBoundingClientRect();
+        let stage = document.getElementById('battle-stage').getBoundingClientRect();
+        el.style.left = (rect.left - stage.left + rect.width/2 + (Math.random()*40 - 20)) + 'px';
+        el.style.top = (rect.top - stage.top + (Math.random()*20 - 10)) + 'px';
+        document.getElementById('battle-stage').appendChild(el);
+        setTimeout(() => el.remove(), 1000);
+    },
+    particles: (target, color, count) => {
+        let rect = document.getElementById(target + '-sprite').getBoundingClientRect();
+        let stage = document.getElementById('battle-stage').getBoundingClientRect();
+        for(let i=0; i<count; i++) {
+            let p = document.createElement('div');
+            p.className = 'particle';
+            p.style.background = color;
+            p.style.left = (rect.left - stage.left + rect.width/2) + 'px';
+            p.style.top = (rect.top - stage.top + rect.height/2) + 'px';
+            p.style.setProperty('--tx', (Math.random() * 150 - 75) + 'px');
+            p.style.setProperty('--ty', (Math.random() * 150 - 75) + 'px');
+            document.getElementById('battle-stage').appendChild(p);
+            setTimeout(() => p.remove(), 500);
+        }
+    },
+    bgShift: () => {
+        const themes = ['#030305', '#030805', '#080303', '#080308', '#0a0a0a'];
+        document.getElementById('game-container').style.background = themes[Math.min(4, Math.floor((State.depth-1)/10))];
+    }
+};
+
+const UI = {
+    switchScreen: (id) => {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        State.phase = id.replace('screen-', '');
+    },
+    toggleDeckViewer: () => {
+        let dv = document.getElementById('deck-viewer');
+        if(dv.style.display === 'flex') { dv.style.display = 'none'; return; }
+        dv.style.display = 'flex';
+        let grid = document.getElementById('deck-grid');
+        grid.innerHTML = '';
+        [...State.deck, ...State.drawPile, ...State.hand, ...State.discard].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c => {
+            grid.appendChild(UI.createCardEl(c, false, true));
+        });
+    },
+    createCardEl: (c, playable, isStatic = false) => {
+        let el = document.createElement('div');
+        let rareClass = CARDS.rare.some(rc => rc.id === c.id) ? 'rare' : '';
+        let playClass = playable ? '' : 'unplayable';
+        el.className = `card ${c.type} ${rareClass} ${isStatic ? '' : playClass}`;
+        el.innerHTML = `
+            <div class="card-cost">${c.cost}</div><div class="card-art">${c.art}</div>
+            <div class="card-title">${c.name}</div><div class="card-desc">${c.d}</div>
+        `;
+        el.onmouseenter = () => { if (!isStatic && playable) SFX.hover(); };
+        return el;
+    },
+    render: () => {
+        document.getElementById('ui-depth').innerText = `${State.depth}/${State.maxDepth}`;
+        document.getElementById('ui-deck-count').innerText = `[${State.deck.length + State.drawPile.length + State.hand.length + State.discard.length}]`;
+        
+        let ab = document.getElementById('hud-artifacts');
+        ab.innerHTML = '';
+        State.player.artifacts.forEach(a => {
+            ab.innerHTML += `<div class="artifact-icon" data-tooltip="${a.name}: ${a.d}">${a.icon}</div>`;
+        });
+
+        if(State.phase === 'battle') {
+            const updateEntity = (key) => {
+                let ent = State[key];
+                document.getElementById(`${key}-hp-txt`).innerText = `${ent.hp}/${ent.max}`;
+                document.getElementById(`${key}-hp-fill`).style.width = `${(ent.hp/ent.max)*100}%`;
+                
+                let maxRef = Math.max(ent.max, ent.hp + ent.shield);
+                document.getElementById(`${key}-shield-fill`).style.width = ent.shield > 0 ? `${(ent.shield/maxRef)*100}%` : '0';
+                
+                let sCont = document.getElementById(`${key}-statuses`);
+                sCont.innerHTML = ent.shield > 0 ? `<div class="status-icon" data-tooltip="Blocks damage.">🛡️ ${ent.shield}</div>` : '';
+                for(let k in ent.statuses) {
+                    if(ent.statuses[k] > 0) {
+                        let icon = k==='burn'?'🔥':k==='weak'?'📉':'🎯';
+                        let desc = k==='burn'?'Takes DMG on start.':k==='weak'?'Deals 25% less DMG.':'Takes 50% more DMG.';
+                        sCont.innerHTML += `<div class="status-icon" data-tooltip="${desc}">${icon} ${ent.statuses[k]}</div>`;
+                    }
+                }
+            };
+            updateEntity('player');
+            updateEntity('enemy');
+
+            let intentEl = document.getElementById('enemy-intent');
+            if(State.enemy.intent) {
+                let i = State.enemy.intent;
+                intentEl.innerHTML = i.t === 'atk' ? `⚔️ ${i.v}` : i.t === 'def' ? `🛡️ ${i.v}` : `🔮 Buff`;
+                intentEl.style.display = 'flex';
+            } else { intentEl.style.display = 'none'; }
+
+            document.getElementById('ui-aether').innerText = `${State.player.aether}/${State.player.maxAether}`;
+            document.getElementById('ui-draw').innerText = State.drawPile.length;
+            document.getElementById('ui-discard').innerText = State.discard.length;
+            document.getElementById('btn-end-turn').disabled = !State.turnActive;
+
+            let handEl = document.getElementById('battle-hand');
+            handEl.innerHTML = '';
+            State.hand.forEach((c, idx) => {
+                let playable = State.turnActive && State.player.aether >= c.cost;
+                let el = UI.createCardEl(c, playable);
+                if(playable) el.onclick = () => Game.playCard(idx);
+                else el.onclick = () => { if(State.turnActive) SFX.error(); };
+                handEl.appendChild(el);
+            });
+        }
+    }
+};
+
+const Game = {
+    startRun: () => {
+        SFX.init();
+        SFX.click();
+        State.depth = 1;
+        
+        // Initializing the deck with the reimagined baseline cards
+        State.deck = [
+            Utils.deepCopy(CARDS.standard[0]), Utils.deepCopy(CARDS.standard[0]), Utils.deepCopy(CARDS.standard[0]), Utils.deepCopy(CARDS.standard[0]),
+            Utils.deepCopy(CARDS.standard[1]), Utils.deepCopy(CARDS.standard[1]), Utils.deepCopy(CARDS.standard[1]), Utils.deepCopy(CARDS.standard[1]),
+            Utils.deepCopy(CARDS.standard[7]) 
+        ];
+        State.player = { hp: 60, max: 60, aether: 3, maxAether: 3, shield: 0, artifacts: [], statuses: {} };
+        Game.initCombat();
+    },
+
+    initCombat: () => {
+        FX.bgShift();
+        State.player.statuses = {};
+        State.player.shield = 0;
+        
+        State.drawPile = Utils.shuffle([...State.deck]);
+        State.hand = [];
+        State.discard = [];
+
+        let isBoss = State.depth % 10 === 0;
+        let tpl;
+        if(isBoss) {
+            tpl = BOSSES[(State.depth / 10) - 1];
+        } else {
+            let tier = State.depth < 15 ? 1 : State.depth < 35 ? 2 : 3;
+            tpl = Utils.rand(ENEMY_TIERS[tier]);
+        }
+
+        let scale = 1 + (State.depth * 0.10) + Math.pow(State.depth/20, 2); 
+        let variance = 0.85 + (Math.random() * 0.3); 
+        let finalHp = Math.floor(tpl.hp * scale * variance);
+
+        State.enemy = {
+            name: tpl.name, sprite: tpl.sprite, archetype: tpl.type,
+            max: finalHp, hp: finalHp, shield: 0, statuses: {}, intent: null, isBoss: isBoss
+        };
+
+        let el = document.getElementById('enemy-sprite');
+        el.innerText = State.enemy.sprite;
+        el.className = isBoss ? 'sprite boss-sprite' : 'sprite';
+        document.getElementById('enemy-name').innerText = State.enemy.name;
+
+        State.player.artifacts.forEach(a => a.onStart && a.onStart(State));
+
+        UI.switchScreen('screen-battle');
+        Game.generateIntent();
+        setTimeout(() => Game.startTurn(), 500);
+    },
+
+    startTurn: () => {
+        if(State.player.hp <= 0 || State.enemy.hp <= 0) return;
+        
+        State.turnActive = true;
+        State.player.aether = State.player.maxAether;
+        State.player.shield = 0;
+
+        if(Game.processDOT('player')) return; 
+
+        State.player.artifacts.forEach(a => a.onTurn && a.onTurn(State));
+        
+        Game.draw(5);
+        UI.render();
+    },
+
+    draw: (amt) => {
+        for(let i=0; i<amt; i++) {
+            if(State.drawPile.length === 0) {
+                if(State.discard.length === 0) break;
+                State.drawPile = Utils.shuffle([...State.discard]);
+                State.discard = [];
+            }
+            State.hand.push(State.drawPile.pop());
+        }
+    },
+
+    playCard: (idx) => {
+        if(!State.turnActive) return;
+        let c = State.hand[idx];
+        if(State.player.aether < c.cost) { SFX.error(); return; }
+
+        State.player.aether -= c.cost;
+        State.discard.push(State.hand.splice(idx, 1)[0]);
+        UI.render();
+        
+        if(c.type === 'atk') SFX.atk();
+        else if (c.type === 'def') SFX.def();
+        else SFX.click();
+
+        FX.lunge('player', false);
+
+        setTimeout(() => {
+            if(c.type === 'atk') {
+                let base = c.v + State.player.artifacts.reduce((acc, a) => acc + (a.buffAtk || 0), 0);
+                let finalDmg = Game.calcDamage(base, 'player', 'enemy');
+                Game.hit('enemy', finalDmg);
+                if(c.status) Game.applyStatus('enemy', c.status);
+            }
+            if(c.type === 'def') {
+                State.player.shield += c.v;
+                FX.popText('player', `+${c.v} 🛡️`, 'var(--shield)');
+            }
+            if(c.draw) Game.draw(c.draw);
+            if(c.energy) { State.player.aether += c.energy; FX.popText('player', '+AETHER', '#ffea00'); }
+            if(c.shatter) { State.enemy.shield = 0; FX.particles('enemy', 'var(--shield)', 15); FX.popText('enemy', 'SHATTER', 'var(--shield)'); }
+            if(c.heal) Game.heal('player', c.heal);
+
+            UI.render();
+            Game.checkDeath();
+        }, 150);
+    },
+
+    endTurn: () => {
+        if(!State.turnActive) return;
+        SFX.click();
+        State.turnActive = false;
+        
+        State.discard.push(...State.hand);
+        State.hand = [];
+        UI.render();
+
+        if(Game.processDOT('enemy')) return;
+
+        setTimeout(() => Game.enemyAction(), 600);
+    },
+
+    enemyAction: () => {
+        if(State.enemy.hp <= 0) return;
+        
+        let i = State.enemy.intent;
+        State.enemy.shield = 0;
+        
+        if(i.t === 'atk' || i.t === 'debuff') FX.lunge('enemy', true);
+
+        setTimeout(() => {
+            if(i.t === 'atk') {
+                SFX.atk();
+                let dmg = Game.calcDamage(i.v, 'enemy', 'player');
+                Game.hit('player', dmg);
+            } else if (i.t === 'def') {
+                SFX.def();
+                State.enemy.shield += i.v;
+                FX.popText('enemy', `+${i.v} 🛡️`, 'var(--shield)');
+            }
+            
+            if(i.status) Game.applyStatus('player', i.status);
+
+            Game.tickStatuses('player');
+            Game.tickStatuses('enemy');
+
+            UI.render();
+            if(!Game.checkDeath()) {
+                Game.generateIntent();
+                setTimeout(() => Game.startTurn(), 500);
+            }
+        }, 200);
+    },
+
+    generateIntent: () => {
+        let e = State.enemy;
+        let baseDmg = Math.floor(5 + (State.depth * 1.5));
+        
+        let dmgVariance = Math.floor(Math.random() * 7) - 2; 
+        
+        if(e.archetype === 'striker') {
+            e.intent = { t: 'atk', v: Math.max(1, baseDmg + dmgVariance + 2) };
+        } else if (e.archetype === 'tank') {
+            e.intent = Math.random() > 0.4 ? { t: 'def', v: baseDmg + 5 } : { t: 'atk', v: Math.max(1, baseDmg + dmgVariance) };
+        } else if (e.archetype === 'debuffer') {
+            e.intent = Math.random() > 0.5 ? { t: 'atk', v: Math.max(1, baseDmg + dmgVariance - 2), status: {weak: 2} } : { t: 'atk', v: Math.max(1, baseDmg + dmgVariance - 2), status: {vuln: 2} };
+        } else {
+            let cycle = [ {t:'atk', v: baseDmg*1.5}, {t:'def', v: baseDmg*2}, {t:'atk', v: baseDmg, status:{vuln:2, weak:2}} ];
+            e.intent = cycle[Math.floor(Math.random() * cycle.length)];
+            if(e.intent.t === 'atk') e.intent.v += dmgVariance;
+        }
+        UI.render();
+    },
+
+    calcDamage: (base, attackerKey, defenderKey) => {
+        let att = State[attackerKey];
+        let def = State[defenderKey];
+        let dmg = base;
+        if(att.statuses.weak) dmg = Math.floor(dmg * 0.75);
+        if(def.statuses.vuln) dmg = Math.floor(dmg * 1.50);
+        return Math.max(0, dmg);
+    },
+
+    hit: (targetKey, amt) => {
+        let t = State[targetKey];
+        let dmgToHp = Math.max(0, amt - t.shield);
+        let shieldBroke = t.shield > 0 && dmgToHp > 0;
+        
+        t.shield = Math.max(0, t.shield - amt);
+        t.hp = Math.max(0, t.hp - dmgToHp);
+        
+        if(dmgToHp > 0) SFX.hit();
+
+        let color = dmgToHp > 0 ? '#ff0055' : 'var(--shield)';
+        FX.popText(targetKey, `-${amt}`, color);
+        FX.shake(targetKey + '-sprite', false);
+        
+        if(shieldBroke) FX.particles(targetKey, 'var(--shield)', 8);
+        if(dmgToHp >= 15) FX.shake('game-container', true); 
+    },
+
+    heal: (targetKey, amt) => {
+        let t = State[targetKey];
+        let actual = Math.min(t.max - t.hp, amt);
+        if(actual > 0) {
+            SFX.heal();
+            t.hp += actual;
+            FX.popText(targetKey, `+${actual}`, 'var(--heal)');
+            FX.particles(targetKey, 'var(--heal)', 5);
+        }
+    },
+
+    applyStatus: (targetKey, obj) => {
+        let s = State[targetKey].statuses;
+        for(let k in obj) {
+            s[k] = (s[k] || 0) + obj[k];
+            let color = k==='burn'?'var(--burn)':k==='vuln'?'var(--vuln)':'var(--weak)';
+            FX.popText(targetKey, `+${k.toUpperCase()}`, color);
+        }
+    },
+
+    processDOT: (targetKey) => {
+        let t = State[targetKey];
+        if(t.statuses.burn > 0) {
+            SFX.hit();
+            t.hp = Math.max(0, t.hp - t.statuses.burn);
+            FX.popText(targetKey, `-${t.statuses.burn} BURN`, 'var(--burn)');
+            FX.shake(targetKey + '-sprite', false);
+            UI.render();
+            return Game.checkDeath();
+        }
+        return false;
+    },
+
+    tickStatuses: (targetKey) => {
+        let s = State[targetKey].statuses;
+        for(let k in s) { if(s[k] > 0) s[k]--; }
+    },
+
+    checkDeath: () => {
+        if(State.player.hp <= 0) {
+            State.turnActive = false;
+            SFX.lose();
+            setTimeout(() => UI.switchScreen('screen-gameover'), 800);
+            return true;
+        }
+        if(State.enemy.hp <= 0) {
+            State.turnActive = false;
+            SFX.win();
+            FX.particles('enemy', '#fff', 40);
+            document.getElementById('enemy-sprite').style.transform = 'scale(0)';
+            setTimeout(() => Game.winCombat(), 1000);
+            return true;
+        }
+        return false;
+    },
+
+    winCombat: () => {
+        document.getElementById('enemy-sprite').style.transform = 'scale(1)'; 
+        if(State.depth >= State.maxDepth) {
+            document.getElementById('over-title').innerText = "SOURCE PURGED";
+            document.getElementById('over-title').style.color = "var(--heal)";
+            document.getElementById('over-desc').innerText = "System entirely stabilized.";
+            UI.switchScreen('screen-gameover');
+            return;
+        }
+
+        if(State.enemy.isBoss) {
+            let art = Utils.rand(ARTIFACTS.filter(a => !State.player.artifacts.includes(a)));
+            if(art) {
+                State.player.artifacts.push(art);
+                if(art.onPickup) art.onPickup(State);
+            }
+        }
+
+        if(State.depth % 5 === 0 && !State.enemy.isBoss) {
+            UI.switchScreen('screen-forge');
+        } else {
+            Game.showReward();
+        }
+    },
+
+    showReward: () => {
+        UI.switchScreen('screen-reward');
+        let cont = document.getElementById('reward-cards');
+        cont.innerHTML = '';
+        for(let i=0; i<3; i++) {
+            let rareRoll = Math.random() < 0.25; 
+            let pool = rareRoll ? CARDS.rare : CARDS.standard;
+            let c = Utils.deepCopy(Utils.rand(pool));
+            
+            let el = UI.createCardEl(c, false, true);
+            el.onclick = () => { SFX.click(); State.deck.push(c); Game.nextDepth(); };
+            cont.appendChild(el);
+        }
+    },
+
+    skipReward: () => Game.nextDepth(),
+
+    forgeAction: (type) => {
+        if(type === 'heal') {
+            State.player.hp = Math.min(State.player.max, State.player.hp + Math.floor(State.player.max * 0.3));
+            Game.nextDepth();
+        } else {
+            UI.switchScreen('screen-purge');
+            let grid = document.getElementById('purge-grid');
+            grid.innerHTML = '';
+            State.deck.forEach((c, idx) => {
+                let el = UI.createCardEl(c, false, true);
+                el.onclick = () => { SFX.hit(); State.deck.splice(idx, 1); Game.nextDepth(); };
+                grid.appendChild(el);
+            });
+        }
+    },
+
+    nextDepth: () => {
+        State.depth++;
+        Game.initCombat();
+    }
+};
+</script>
+</body>
+</html>
