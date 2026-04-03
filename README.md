@@ -28,3 +28,16 @@ It's a simple, endless game, made in ~5 hours.
 <img width="1844" height="909" alt="{225A1CC6-A1D6-4430-A02B-2C07CDA64AFC}" src="https://github.com/user-attachments/assets/918fb0e1-41ca-49fe-b931-d955c21328cd" />
 
 Go ahead and try this one out! I'm not really that proud out of it, but it's not as terrible as it was before I even thought of uploading it.
+
+# Nexus TD
+Probably the one I'm most proud of, took me a whole day, mechanics are simple, but the game loop is pretty addicting if you ask me!
+
+<img width="1854" height="910" alt="{F141402E-842F-47CD-863E-B8CECA06663F}" src="https://github.com/user-attachments/assets/f25cbb5c-9389-4cc1-a76e-7f61f77aafd5" />
+
+<img width="1856" height="907" alt="{9B13FF72-6637-4F55-9D30-09486FEC20FC}" src="https://github.com/user-attachments/assets/5656606a-d14c-4f4a-a549-441d2887b6c0" />
+
+<img width="1853" height="908" alt="{E6C5831A-6819-46BC-94F2-9559E7FCB5BB}" src="https://github.com/user-attachments/assets/ff1b72a5-01dd-4d2e-a369-fe3d5da4a86c" />
+
+<img width="1851" height="913" alt="{A544F9EF-EFCE-4635-98EA-FBD1D5501456}" src="https://github.com/user-attachments/assets/568ed119-6cfb-48ef-8f57-1648f64561fa" />
+
+Check it out!
